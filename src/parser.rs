@@ -1,9 +1,37 @@
-// ELF Class constants
-const ELF_CLASS_TABLE: [(u8, &str); 3] = [
-    (0, "Invalid class"),
-    (1, "32-bit objects"),
-    (2, "64-bit objects"),
-];
+use std::fmt::{Display, Formatter, Result as FmtResult};
+
+#[derive(Debug)]
+pub enum ElfParseError {
+    InvalidSize,
+    InvalidMagic,
+    InvalidClass,
+    InvalidData,
+    InvalidVersion,
+    InvalidOsAbi,
+    InvalidType,
+    InvalidMachine,
+    ReservedOsAbi,
+    IoError(std::io::Error),
+}
+
+impl Display for ElfParseError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            ElfParseError::InvalidSize => write!(f, "Invalid ELF header size"),
+            ElfParseError::InvalidMagic => write!(f, "Invalid ELF magic number"),
+            ElfParseError::InvalidClass => write!(f, "Invalid ELF class"),
+            ElfParseError::InvalidData => write!(f, "Invalid ELF data encoding"),
+            ElfParseError::InvalidVersion => write!(f, "Invalid ELF version"),
+            ElfParseError::InvalidOsAbi => write!(f, "Invalid ELF OS/ABI"),
+            ElfParseError::InvalidType => write!(f, "Invalid ELF type"),
+            ElfParseError::InvalidMachine => write!(f, "Invalid ELF machine"),
+            ElfParseError::ReservedOsAbi => write!(f, "Reserved OS/ABI value"),
+            ElfParseError::IoError(e) => write!(f, "IO Error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for ElfParseError {}
 
 #[derive(Debug, Clone, Copy)]
 enum IdentClass {
@@ -11,12 +39,14 @@ enum IdentClass {
     ELFCLASS64 = 2,
 }
 
-// ELF Data encoding constants
-const ELF_DATA_TABLE: [(u8, &str); 3] = [
-    (0, "Invalid data encoding"),
-    (1, "Little-endian"),
-    (2, "Big-endian"),
-];
+impl Display for IdentClass {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            IdentClass::ELFCLASS32 => write!(f, "32-bit objects"),
+            IdentClass::ELFCLASS64 => write!(f, "64-bit objects"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum IdentData {
@@ -24,11 +54,14 @@ enum IdentData {
     ELFDATA2MSB = 2,
 }
 
-// ELF Version constants
-const ELF_VERSION_TABLE: [(u8, &str); 2] = [
-    (0, "Invalid version"),
-    (1, "Current version"),
-];
+impl Display for IdentData {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            IdentData::ELFDATA2LSB => write!(f, "Little-endian"),
+            IdentData::ELFDATA2MSB => write!(f, "Big-endian"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum IdentVersion {
@@ -36,29 +69,14 @@ enum IdentVersion {
     EvCurrent = 1,
 }
 
-// ELF OS/ABI constants
-const ELF_OSABI_TABLE: [(u8, &str); 20] = [
-    (0, "No extensions or unspecified"),
-    (1, "HP-UX"),
-    (2, "NetBSD"),
-    (3, "GNU"),
-    (4, "Reserved"),
-    (5, "Reserved"),
-    (6, "Solaris"),
-    (7, "AIX"),
-    (8, "IRIX"),
-    (9, "FreeBSD"),
-    (10, "Tru64"),
-    (11, "Novell Modesto"),
-    (12, "OpenBSD"),
-    (13, "OpenVMS"),
-    (14, "NonStop Kernel"),
-    (15, "AROS"),
-    (16, "FenixOS"),
-    (17, "CloudABI"),
-    (18, "Stratus Technologies OpenVOS"),
-    (255, "Standalone (embedded) application"),
-];
+impl Display for IdentVersion {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            IdentVersion::EvNone => write!(f, "Invalid version"),
+            IdentVersion::EvCurrent => write!(f, "Current version"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum IdentOSABI {
@@ -82,6 +100,31 @@ enum IdentOSABI {
     STANDALONE = 255,
 }
 
+impl Display for IdentOSABI {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            IdentOSABI::NONE => write!(f, "No extensions or unspecified"),
+            IdentOSABI::HPUX => write!(f, "HP-UX"),
+            IdentOSABI::NETBSD => write!(f, "NetBSD"),
+            IdentOSABI::GNU => write!(f, "GNU"),
+            IdentOSABI::SOLARIS => write!(f, "Solaris"),
+            IdentOSABI::AIX => write!(f, "AIX"),
+            IdentOSABI::IRIX => write!(f, "IRIX"),
+            IdentOSABI::FREEBSD => write!(f, "FreeBSD"),
+            IdentOSABI::TRU64 => write!(f, "Tru64"),
+            IdentOSABI::MODESTO => write!(f, "Novell Modesto"),
+            IdentOSABI::OPENBSD => write!(f, "OpenBSD"),
+            IdentOSABI::OPENVMS => write!(f, "OpenVMS"),
+            IdentOSABI::NSK => write!(f, "NonStop Kernel"),
+            IdentOSABI::AROS => write!(f, "AROS"),
+            IdentOSABI::FENIXOS => write!(f, "FenixOS"),
+            IdentOSABI::CLOUDABI => write!(f, "CloudABI"),
+            IdentOSABI::OPENVOS => write!(f, "Stratus Technologies OpenVOS"),
+            IdentOSABI::STANDALONE => write!(f, "Standalone (embedded) application"),
+        }
+    }
+}
+
 // ELF Identification structure
 struct EIdent {
     magic: [u8; 4],
@@ -93,14 +136,14 @@ struct EIdent {
 }
 
 impl EIdent {
-    pub fn from_bytes(bytes: &[u8]) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ElfParseError> {
         if bytes.len() < 16 {
-            panic!("Invalid ELF ident size");
+            return Err(ElfParseError::InvalidSize);
         }
 
         // Check magic number
         if bytes[0..4] != [0x7f, b'E', b'L', b'F'] {
-            panic!("Invalid ELF magic number");
+            return Err(ElfParseError::InvalidMagic);
         }
 
         let mut magic = [0; 4];
@@ -109,19 +152,19 @@ impl EIdent {
         let class = match bytes[4] {
             1 => IdentClass::ELFCLASS32,
             2 => IdentClass::ELFCLASS64,
-            _ => panic!("Invalid ELF class"),
+            _ => return Err(ElfParseError::InvalidClass),
         };
 
         let data = match bytes[5] {
             1 => IdentData::ELFDATA2LSB,
             2 => IdentData::ELFDATA2MSB,
-            _ => panic!("Invalid ELF data encoding"),
+            _ => return Err(ElfParseError::InvalidData),
         };
 
         let version = match bytes[6] {
             0 => IdentVersion::EvNone,
             1 => IdentVersion::EvCurrent,
-            _ => panic!("Invalid ELF version"),
+            _ => return Err(ElfParseError::InvalidVersion),
         };
 
         let os_abi = match bytes[7] {
@@ -129,8 +172,7 @@ impl EIdent {
             1 => IdentOSABI::HPUX,
             2 => IdentOSABI::NETBSD,
             3 => IdentOSABI::GNU,
-            4 => todo!("Reserved OSABI"),
-            5 => todo!("Reserved OSABI"),
+            4..=5 => return Err(ElfParseError::ReservedOsAbi),
             6 => IdentOSABI::SOLARIS,
             7 => IdentOSABI::AIX,
             8 => IdentOSABI::IRIX,
@@ -144,43 +186,34 @@ impl EIdent {
             16 => IdentOSABI::FENIXOS,
             17 => IdentOSABI::CLOUDABI,
             18 => IdentOSABI::OPENVOS,
-            19_u8..=254_u8 => todo!("Reserved OSABI"),
+            19..=254 => return Err(ElfParseError::ReservedOsAbi),
             255 => IdentOSABI::STANDALONE,
         };
 
         let abi_version = bytes[8];
 
-        EIdent {
+        Ok(EIdent {
             magic,
             class,
             data,
             version,
             os_abi,
             abi_version,
-        }
-    }
-
-    pub fn print(&self) {
-        println!("ELF Identification:");
-        println!("  Magic: {:x?}", self.magic);
-        println!("  Class: {:?}", ELF_CLASS_TABLE[self.class as usize]);
-        println!("  Data: {:?}", ELF_DATA_TABLE[self.data as usize]);
-        println!("  Version: {:?}", ELF_VERSION_TABLE[self.version as usize]);
-        println!("  OS/ABI: {:?}", ELF_OSABI_TABLE[self.os_abi as usize]);
-        println!("  ABI Version: {}", self.abi_version);
+        })
     }
 }
 
-// ELF Type constants
-const ELF_TYPE_TABLE: [(u16, &str); 7] = [
-    (0, "No file type"),
-    (1, "Relocatable file"),
-    (2, "Executable file"),
-    (3, "Shared object file"),
-    (4, "Core file"),
-    (0xff00, "Processor-specific"),
-    (0xffff, "Processor-specific"),
-];
+impl Display for EIdent {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        writeln!(f, "ELF Identification:")?;
+        writeln!(f, "  Magic: {:x?}", self.magic)?;
+        writeln!(f, "  Class: {}", self.class)?;
+        writeln!(f, "  Data: {}", self.data)?;
+        writeln!(f, "  Version: {}", self.version)?;
+        writeln!(f, "  OS/ABI: {}", self.os_abi)?;
+        write!(f, "  ABI Version: {}", self.abi_version)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ElfType {
@@ -193,30 +226,19 @@ enum ElfType {
     EtHiProc = 0xffff,
 }
 
-// ELF Machine constants
-const ELF_MACHINE_TABLE: [(u16, &str); 21] = [
-    (0, "No machine"),
-    (1, "AT&T WE 32100"),
-    (2, "SPARC"),
-    (3, "Intel 80386"),
-    (4, "Motorola 68000"),
-    (5, "Motorola 88000"),
-    (7, "Intel 80860"),
-    (8, "MIPS I Architecture"),
-    (9, "IBM System/370 Processor"),
-    (10, "MIPS RS3000 Little-endian"),
-    (15, "Hewlett-Packard PA-RISC"),
-    (17, "Fujitsu VPP500"),
-    (18, "Enhanced instruction set SPARC"),
-    (19, "Intel 80960"),
-    (20, "PowerPC"),
-    (21, "PowerPC64"),
-    (22, "IBM System/390 Processor"),
-    (183, "ARM AARCH64"),
-    (243, "RISC-V"),
-    (0xff00, "Processor-specific"),
-    (0xffff, "Processor-specific"),
-];
+impl Display for ElfType {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            ElfType::EtNone => write!(f, "No file type"),
+            ElfType::EtRel => write!(f, "Relocatable file"),
+            ElfType::EtExec => write!(f, "Executable file"),
+            ElfType::EtDyn => write!(f, "Shared object file"),
+            ElfType::EtCore => write!(f, "Core file"),
+            ElfType::EtLoProc => write!(f, "Processor-specific (low)"),
+            ElfType::EtHiProc => write!(f, "Processor-specific (high)"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ElfMachine {
@@ -237,22 +259,55 @@ enum ElfMachine {
     EmPpc = 20,
     EmPpc64 = 21,
     EmS390 = 22,
+    EmX8664 = 62,
     EmAarch64 = 183,
     EmRiscv = 243,
     EmLoProc = 0xff00,
     EmHiProc = 0xffff,
 }
 
-// ELF Version constants
-const ELF_VERSION_ENUM: [(u32, &str); 2] = [
-    (0, "Invalid version"),
-    (1, "Current version"),
-];
+impl Display for ElfMachine {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            ElfMachine::EmNone => write!(f, "No machine"),
+            ElfMachine::EmM32 => write!(f, "AT&T WE 32100"),
+            ElfMachine::EmSparc => write!(f, "SPARC"),
+            ElfMachine::Em386 => write!(f, "Intel 80386"),
+            ElfMachine::Em68k => write!(f, "Motorola 68000"),
+            ElfMachine::Em88k => write!(f, "Motorola 88000"),
+            ElfMachine::Em860 => write!(f, "Intel 80860"),
+            ElfMachine::EmMips => write!(f, "MIPS I Architecture"),
+            ElfMachine::EmS370 => write!(f, "IBM System/370 Processor"),
+            ElfMachine::EmMipsRs3Le => write!(f, "MIPS RS3000 Little-endian"),
+            ElfMachine::EmParisc => write!(f, "Hewlett-Packard PA-RISC"),
+            ElfMachine::EmVpp500 => write!(f, "Fujitsu VPP500"),
+            ElfMachine::EmSparc32Plus => write!(f, "Enhanced instruction set SPARC"),
+            ElfMachine::Em960 => write!(f, "Intel 80960"),
+            ElfMachine::EmPpc => write!(f, "PowerPC"),
+            ElfMachine::EmPpc64 => write!(f, "PowerPC64"),
+            ElfMachine::EmS390 => write!(f, "IBM System/390 Processor"),
+            ElfMachine::EmX8664 => write!(f, "AMD x86-64 architecture"),
+            ElfMachine::EmAarch64 => write!(f, "ARM AARCH64"),
+            ElfMachine::EmRiscv => write!(f, "RISC-V"),
+            ElfMachine::EmLoProc => write!(f, "Processor-specific (low)"),
+            ElfMachine::EmHiProc => write!(f, "Processor-specific (high)"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ElfVersion {
     EvNone = 0,
     EvCurrent = 1,
+}
+
+impl Display for ElfVersion {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            ElfVersion::EvNone => write!(f, "Invalid version"),
+            ElfVersion::EvCurrent => write!(f, "Current version"),
+        }
+    }
 }
 
 // ELF Header structure
@@ -274,12 +329,12 @@ pub struct ElfHeader {
 }
 
 impl ElfHeader {
-    pub fn from_bytes(bytes: &[u8]) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ElfParseError> {
         if bytes.len() < 64 {
-            panic!("Invalid ELF header size");
+            return Err(ElfParseError::InvalidSize);
         }
 
-        let ident = EIdent::from_bytes(&bytes[0..16]);
+        let ident = EIdent::from_bytes(&bytes[0..16])?;
 
         let e_type = match u16::from_le_bytes([bytes[16], bytes[17]]) {
             0 => ElfType::EtNone,
@@ -289,10 +344,11 @@ impl ElfHeader {
             4 => ElfType::EtCore,
             0xff00 => ElfType::EtLoProc,
             0xffff => ElfType::EtHiProc,
-            _ => panic!("Invalid ELF type"),
+            _ => return Err(ElfParseError::InvalidType),
         };
 
-        let machine = match u16::from_le_bytes([bytes[18], bytes[19]]) {
+        let machine_value = u16::from_le_bytes([bytes[18], bytes[19]]);
+        let machine = match machine_value {
             0 => ElfMachine::EmNone,
             1 => ElfMachine::EmM32,
             2 => ElfMachine::EmSparc,
@@ -310,17 +366,21 @@ impl ElfHeader {
             20 => ElfMachine::EmPpc,
             21 => ElfMachine::EmPpc64,
             22 => ElfMachine::EmS390,
+            62 => ElfMachine::EmX8664, // x86-64
             183 => ElfMachine::EmAarch64,
             243 => ElfMachine::EmRiscv,
             0xff00 => ElfMachine::EmLoProc,
             0xffff => ElfMachine::EmHiProc,
-            _ => panic!("Invalid ELF machine"),
+            _ => {
+                eprintln!("Unknown machine type: {}", machine_value);
+                return Err(ElfParseError::InvalidMachine);
+            }
         };
 
         let version = match u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]) {
             0 => ElfVersion::EvNone,
             1 => ElfVersion::EvCurrent,
-            _ => panic!("Invalid ELF version"),
+            _ => return Err(ElfParseError::InvalidVersion),
         };
 
         let entry = u64::from_le_bytes([
@@ -343,7 +403,7 @@ impl ElfHeader {
         let shnum = u16::from_le_bytes([bytes[60], bytes[61]]);
         let shstrndx = u16::from_le_bytes([bytes[62], bytes[63]]);
 
-        ElfHeader {
+        Ok(ElfHeader {
             ident,
             e_type,
             machine,
@@ -358,23 +418,25 @@ impl ElfHeader {
             shentsize,
             shnum,
             shstrndx,
-        }
+        })
     }
+}
 
-    pub fn print(&self) {
-        self.ident.print();
-        println!("ELF Type: {:?}", ELF_TYPE_TABLE[self.e_type as usize]);
-        println!("Machine: {:?}", ELF_MACHINE_TABLE[self.machine as usize]);
-        println!("Version: {:?}", ELF_VERSION_ENUM[self.version as usize]);
-        println!("Entry point address: 0x{:x}", self.entry);
-        println!("Start of program headers: {} (bytes into file)", self.phoff);
-        println!("Start of section headers: {} (bytes into file)", self.shoff);
-        println!("Flags: 0x{:x}", self.flags);
-        println!("Size of this header: {} (bytes)", self.ehsize);
-        println!("Size of program headers: {} (bytes)", self.phentsize);
-        println!("Number of program headers: {}", self.phnum);
-        println!("Size of section headers: {} (bytes)", self.shentsize);
-        println!("Number of section headers: {}", self.shnum);
-        println!("Section header string table index: {}", self.shstrndx);
+impl Display for ElfHeader {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{}", self.ident)?;
+        writeln!(f, "\nELF Type: {}", self.e_type)?;
+        writeln!(f, "Machine: {}", self.machine)?;
+        writeln!(f, "Version: {}", self.version)?;
+        writeln!(f, "Entry point address: 0x{:x}", self.entry)?;
+        writeln!(f, "Start of program headers: {} (bytes into file)", self.phoff)?;
+        writeln!(f, "Start of section headers: {} (bytes into file)", self.shoff)?;
+        writeln!(f, "Flags: 0x{:x}", self.flags)?;
+        writeln!(f, "Size of this header: {} (bytes)", self.ehsize)?;
+        writeln!(f, "Size of program headers: {} (bytes)", self.phentsize)?;
+        writeln!(f, "Number of program headers: {}", self.phnum)?;
+        writeln!(f, "Size of section headers: {} (bytes)", self.shentsize)?;
+        writeln!(f, "Number of section headers: {}", self.shnum)?;
+        write!(f, "Section header string table index: {}", self.shstrndx)
     }
 }

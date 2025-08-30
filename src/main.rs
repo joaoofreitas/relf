@@ -33,14 +33,18 @@ fn main() {
     println!("Reading ELF file: {}", args[1]);
 
     let elf_path = &args[1];
-    match read_elf_header(elf_path) {
-        Ok(header) => {
-            let elf_header = parser::ElfHeader::from_bytes(&header);
-            elf_header.print();
-        }
+    match read_and_parse_elf(elf_path) {
+        Ok(elf_header) => println!("{}", elf_header),
         Err(e) => {
-            eprintln!("Error reading ELF file: {}", e);
+            eprintln!("Error: {}", e);
             std::process::exit(1);
         }
     }
+}
+
+fn read_and_parse_elf(path: &str) -> Result<parser::ElfHeader, parser::ElfParseError> {
+    let header = read_elf_header(path)
+        .map_err(parser::ElfParseError::IoError)?;
+    
+    parser::ElfHeader::from_bytes(&header)
 }
