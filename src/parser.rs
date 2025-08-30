@@ -33,7 +33,6 @@ impl Display for ElfParseError {
 
 impl std::error::Error for ElfParseError {}
 
-#[derive(Debug, Clone, Copy)]
 enum IdentClass {
     ELFCLASS32 = 1,
     ELFCLASS64 = 2,
@@ -48,7 +47,6 @@ impl Display for IdentClass {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum IdentData {
     ELFDATA2LSB = 1,
     ELFDATA2MSB = 2,
@@ -63,7 +61,6 @@ impl Display for IdentData {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum IdentVersion {
     EvNone = 0,
     EvCurrent = 1,
@@ -78,7 +75,6 @@ impl Display for IdentVersion {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum IdentOSABI {
     NONE = 0,
     HPUX = 1,
@@ -215,7 +211,6 @@ impl Display for EIdent {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum ElfType {
     EtNone = 0,
     EtRel = 1,
@@ -240,7 +235,6 @@ impl Display for ElfType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum ElfMachine {
     EmNone = 0,
     EmM32 = 1,
@@ -295,7 +289,6 @@ impl Display for ElfMachine {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum ElfVersion {
     EvNone = 0,
     EvCurrent = 1,
