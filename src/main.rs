@@ -1,8 +1,6 @@
 // A simple ELF file parser in Rust that reads and displays the ELF header information.
 // This code focuses on the ELF header structure and its fields
-// This is supposed to be simple and educational, definately not optimized for performance, the
-// tables and excess enums are proof of that.
-//
+// This is supposed to be simple and educational, definitely not optimized for performance.
 //
 // Resources:
 // - https://uclibc.org/docs/elf-64-gen.pdf
@@ -12,39 +10,22 @@
 
 mod parser;
 
-use std::fs::File;
-use std::io::Read;
-
-fn read_elf_header(path: &str) -> std::io::Result<Vec<u8>> {
-    let mut file = File::open(path)?;
-    let mut header = vec![0; 64];
-    file.read_exact(&mut header)?;
-
-    Ok(header)
-}
+use std::env;
+use std::process;
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: {} <elf-file>", args[0]);
-        std::process::exit(1);
+        process::exit(1);
     }
 
-    println!("Reading ELF file: {}", args[1]);
+    println!("Reading ELF file: {}", &args[1]);
 
-    let elf_path = &args[1];
-    match read_and_parse_elf(elf_path) {
+    match parser::ElfHeader::from_file(&args[1]) {
         Ok(elf_header) => println!("{}", elf_header),
         Err(e) => {
             eprintln!("Error: {}", e);
-            std::process::exit(1);
         }
     }
-}
-
-fn read_and_parse_elf(path: &str) -> Result<parser::ElfHeader, parser::ElfParseError> {
-    let header = read_elf_header(path)
-        .map_err(parser::ElfParseError::IoError)?;
-    
-    parser::ElfHeader::from_bytes(&header)
 }

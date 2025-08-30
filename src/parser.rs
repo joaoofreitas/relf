@@ -329,6 +329,20 @@ pub struct ElfHeader {
 }
 
 impl ElfHeader {
+    pub fn from_file(path: &str) -> Result<Self, ElfParseError> {
+        use std::fs::File;
+        use std::io::Read;
+        
+        let mut file = File::open(path)
+            .map_err(ElfParseError::IoError)?;
+        
+        let mut header = vec![0; 64];
+        file.read_exact(&mut header)
+            .map_err(ElfParseError::IoError)?;
+        
+        Self::from_bytes(&header)
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ElfParseError> {
         if bytes.len() < 64 {
             return Err(ElfParseError::InvalidSize);
