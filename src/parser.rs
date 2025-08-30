@@ -377,7 +377,6 @@ impl ElfHeader {
             0xff00 => ElfMachine::EmLoProc,
             0xffff => ElfMachine::EmHiProc,
             _ => {
-                eprintln!("Unknown machine type: {}", machine_value);
                 return Err(ElfParseError::InvalidMachine);
             }
         };
